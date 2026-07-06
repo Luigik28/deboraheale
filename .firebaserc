@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "alessandroedeborah-feec3"
+  },
+  "targets": {
+    "alessandroedeborah-feec3": {
+      "hosting": {
+        "main": [
+          "alessandroedeborah"
+        ]
+      }
+    }
+  }
+}
