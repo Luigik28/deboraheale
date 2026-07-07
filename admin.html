@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Alessandro & Deborah</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Tangerine:wght@400;700&family=Cormorant+SC&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">A &amp; D</div>
+    <p class="login-subtitle">Amministrazione</p>
+    <div class="login-form">
+      <div class="login-field">
+        <label for="u">Email</label>
+        <input id="u" type="email" autocomplete="email">
+      </div>
+      <div class="login-field">
+        <label for="p">Password</label>
+        <div class="pw-wrap">
+          <input id="p" type="password" autocomplete="current-password">
+          <button type="button" id="pw-toggle" class="pw-toggle" aria-label="Mostra password">👁</button>
+        </div>
+      </div>
+      <label class="login-remember">
+        <input type="checkbox" id="remember"> Ricordami
+      </label>
+      <p class="login-error" id="login-error" aria-live="polite"></p>
+      <button id="login-btn" class="btn" style="width:100%;background:var(--gold);color:var(--ivory);border-color:var(--gold);">Accedi</button>
+    </div>
+  </div>
+</div>
+
+<div id="admin-panel" hidden>
+  <header class="admin-header">
+    <div class="container admin-header-inner">
+      <div class="admin-brand">
+        A &amp; D
+        <small>Amministrazione galleria</small>
+      </div>
+      <div class="admin-actions">
+        <span class="admin-count" id="admin-count"></span>
+        <button class="btn" id="refresh-btn" style="border:1px solid var(--gold);color:var(--gold);" title="Aggiorna">↻</button>
+        <button class="btn" id="logout-btn" style="border:1px solid var(--gold);color:var(--gold);">Esci</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <div class="container">
+      <div class="admin-grid" id="admin-grid">
+        <div class="admin-empty">Caricamento…</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script type="module">
+  import { db, storage, auth } from './assets/js/firebase-config.js?v=1';
+  import { openLightbox }      from './assets/js/lightbox.js?v=1';
+
+  const loginScreen = document.getElementById('login-screen');
+  const adminPanel  = document.getElementById('admin-panel');
+  let items = [];
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      loginScreen.hidden = true;
+      adminPanel.hidden  = false;
+      loadGallery();
+    } else {
+      loginScreen.hidden = false;
+      adminPanel.hidden  = true;
+    }
+  });
+
+  async function tryLogin() {
+    const email    = document.getElementById('u').value.trim();
+    const password = document.getElementById('p').value;
+    const remember = document.getElementById('remember').checked;
+    document.getElementById('login-error').textContent = '';
+    try {
+      const persistence = remember
+        ? firebase.auth.Auth.Persistence.LOCAL
+        : firebase.auth.Auth.Persistence.SESSION;
+      await auth.setPersistence(persistence);
+      await auth.signInWithEmailAndPassword(email, password);
+    } catch(e) {
+      const bad = ['auth/invalid-credential','auth/wrong-password','auth/user-not-found','auth/invalid-email'];
+      document.getElementById('login-error').textContent = bad.includes(e.code)
+        ? 'Credenziali non valide' : 'Errore di accesso';
+    }
+  }
+
+  document.getElementById('pw-toggle').addEventListener('click', () => {
+    const input = document.getElementById('p');
+    const show  = input.type === 'password';
+    input.type  = show ? 'text' : 'password';
+    document.getElementById('pw-toggle').textContent = show ? '🙈' : '👁';
+  });
+  document.getElementById('login-btn').addEventListener('click', tryLogin);
+  document.getElementById('p').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+  document.getElementById('u').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+  document.getElementById('refresh-btn').addEventListener('click', () => loadGallery());
+  document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
+
+  async function loadGallery() {
+    const grid = document.getElementById('admin-grid');
+    try {
+      const snap = await db.collection('uploads').orderBy('createdAt', 'desc').get();
+      items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch(e) {
+      grid.innerHTML = '<div class="admin-empty">Errore nel caricamento</div>';
+      return;
+    }
+    renderGrid();
+  }
+
+  function renderGrid() {
+    const grid = document.getElementById('admin-grid');
+    document.getElementById('admin-count').textContent = items.length + ' file';
+
+    if (!items.length) {
+      grid.innerHTML = '<div class="admin-empty">Nessun file presente</div>';
+      return;
+    }
+
+    grid.innerHTML = items.map(item => `
+      <div class="admin-item" id="item-${item.id}">
+        ${item.type === 'image'
+          ? `<img src="${item.thumbUrl || item.url}" alt="${escHtml(item.name || '')}" loading="lazy">`
+          : `<video src="${item.url}" preload="none" muted playsinline data-thumb></video>
+             <div class="video-tag">▶ Video</div>`}
+        <div class="admin-overlay">
+          <button class="delete-btn"
+            data-id="${item.id}"
+            data-url="${escHtml(item.url)}"
+            data-path="${escHtml(item.path || '')}"
+            data-thumb-path="${escHtml(item.thumbPath || '')}"
+            title="Elimina" aria-label="Elimina">✕</button>
+        </div>
+      </div>
+    `).join('');
+
+    grid.querySelectorAll('video[data-thumb]').forEach(vid => {
+      const obs = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        obs.unobserve(vid);
+        vid.preload = 'metadata';
+        vid.addEventListener('loadedmetadata', () => { vid.currentTime = 0.001; }, { once: true });
+      }, { rootMargin: '200px' });
+      obs.observe(vid);
+    });
+
+    grid.querySelectorAll('.admin-item').forEach((el, idx) => {
+      el.addEventListener('click', () => openLightbox(items, idx, 'Alessandro & Deborah'));
+    });
+
+    grid.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        deleteItem(btn.dataset.id, btn.dataset.url, btn.dataset.path, btn.dataset.thumbPath);
+      });
+    });
+  }
+
+  async function deleteItem(docId, url, storagePath, thumbPath) {
+    if (!confirm('Eliminare questo file definitivamente?')) return;
+    const el = document.getElementById(`item-${docId}`);
+    if (el) el.classList.add('deleting');
+    try {
+      await db.collection('uploads').doc(docId).delete();
+      const path = storagePath || pathFromUrl(url);
+      if (path)      { try { await storage.ref(path).delete();      } catch {} }
+      if (thumbPath) { try { await storage.ref(thumbPath).delete(); } catch {} }
+      items = items.filter(i => i.id !== docId);
+      renderGrid();
+      showToast('File eliminato');
+    } catch(e) {
+      console.error('Delete error:', e);
+      if (el) el.classList.remove('deleting');
+      showToast('Errore nell\'eliminazione');
+    }
+  }
+
+  function pathFromUrl(url) {
+    try {
+      const match = url.match(/\/o\/(.+?)\?/);
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch { return null; }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+</script>
+</body>
+</html>

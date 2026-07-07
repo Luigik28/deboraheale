@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foto & Video — Alessandro & Deborah</title>
+<meta name="description" content="Condividi le tue foto e i tuoi video del matrimonio di Alessandro e Deborah.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Tangerine:wght@400;700&family=Cormorant+SC&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a href="index.html#home" class="monogram">A &amp; D</a>
+    <nav class="site-nav">
+      <a href="index.html#home">Home</a>
+      <a href="index.html#info">Info</a>
+      <a href="foto.html" class="active">Foto</a>
+    </nav>
+  </div>
+</header>
+
+<section class="upload-section">
+  <div class="container">
+    <p class="eyebrow" style="text-transform:uppercase;letter-spacing:4px;font-size:13px;color:var(--ink-soft);margin:0 0 10px;">Foto &amp; Video</p>
+    <div class="section-title"><h2>Condividi i Tuoi Scatti</h2></div>
+    <p style="color:var(--ink-soft);margin-top:10px;">Aiutaci a raccogliere i ricordi più belli della giornata</p>
+
+    <div class="upload-card" id="drop-zone">
+      <div class="upload-icon">📷</div>
+      <p>Foto e video dal tuo smartphone</p>
+      <label class="upload-label" for="file-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Carica
+      </label>
+      <input id="file-input" type="file" accept="image/*,video/*" multiple>
+      <p class="upload-hint">Puoi selezionare più file contemporaneamente</p>
+    </div>
+    <div id="progress-area"></div>
+  </div>
+</section>
+
+<div class="divider"><span>&#10084;</span></div>
+
+<section class="gallery-section">
+  <div class="container">
+    <div class="section-title"><h2>I Vostri Ricordi</h2></div>
+    <div class="gallery-filters">
+      <button class="filter-btn active" data-filter="all">Tutti</button>
+      <button class="filter-btn" data-filter="image">Foto</button>
+      <button class="filter-btn" data-filter="video">Video</button>
+    </div>
+    <div class="gallery-grid" id="gallery-grid">
+      <div class="gallery-loading">Caricamento galleria…</div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="monogram-small">A &amp; D</div>
+  <p>2 Settembre 2026 &middot; Barletta</p>
+</footer>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script type="module">
+  import { db, storage } from './assets/js/firebase-config.js?v=1';
+  import { initUpload }  from './assets/js/upload.js?v=1';
+  import { openLightbox } from './assets/js/lightbox.js?v=1';
+
+  let items         = [];
+  let filtered      = [];
+  let currentFilter = 'all';
+
+  async function loadGallery() {
+    try {
+      const snap = await db.collection('uploads').orderBy('createdAt', 'desc').get();
+      items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch(e) {
+      console.error('Gallery load error:', e);
+    }
+    renderGallery();
+  }
+
+  function renderGallery() {
+    const grid = document.getElementById('gallery-grid');
+    filtered = currentFilter === 'all' ? [...items] : items.filter(i => i.type === currentFilter);
+
+    if (!filtered.length) {
+      grid.innerHTML = `<div class="gallery-empty"><div class="gallery-empty-icon">🌸</div><p>Nessuno scatto ancora.<br>Sii il primo a condividere!</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map((item, idx) => {
+      if (item.type === 'image') {
+        return `<div class="gallery-item" data-idx="${idx}" role="button" tabindex="0" aria-label="Foto">
+          <img src="${item.thumbUrl || item.url}" alt="Foto matrimonio" loading="lazy">
+        </div>`;
+      } else {
+        return `<div class="gallery-item" data-idx="${idx}" role="button" tabindex="0" aria-label="Video">
+          <video src="${item.url}" preload="none" muted playsinline data-thumb></video>
+          <div class="video-badge">
+            <svg viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </div>
+        </div>`;
+      }
+    }).join('');
+
+    grid.querySelectorAll('.gallery-item').forEach(el => {
+      el.addEventListener('click', () => openLightbox(filtered, +el.dataset.idx, 'Alessandro & Deborah'));
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openLightbox(filtered, +el.dataset.idx, 'Alessandro & Deborah'); });
+    });
+
+    grid.querySelectorAll('video[data-thumb]').forEach(setupVideoThumb);
+  }
+
+  const thumbObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const vid = entry.target;
+      thumbObserver.unobserve(vid);
+      vid.preload = 'metadata';
+      vid.addEventListener('loadedmetadata', () => { vid.currentTime = 0.001; }, { once: true });
+    });
+  }, { rootMargin: '200px' });
+  function setupVideoThumb(vid) { thumbObserver.observe(vid); }
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderGallery();
+    });
+  });
+
+  initUpload({
+    fileInputId: 'file-input',
+    dropZoneId: 'drop-zone',
+    progressAreaId: 'progress-area',
+    storage, db,
+    collection: 'uploads',
+    storagePath: 'matrimonio',
+    onUploaded: item => { items.unshift(item); renderGallery(); }
+  });
+
+  loadGallery();
+</script>
+</body>
+</html>
