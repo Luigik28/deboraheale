@@ -28,9 +28,12 @@
           <button type="button" id="pw-toggle" class="pw-toggle" aria-label="Mostra password">👁</button>
         </div>
       </div>
-      <label class="login-remember">
-        <input type="checkbox" id="remember"> Ricordami
-      </label>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <label class="login-remember">
+          <input type="checkbox" id="remember"> Ricordami
+        </label>
+        <a href="#" id="forgot-pw" style="font-size:14px;color:var(--gold);text-decoration:underline;">Password dimenticata?</a>
+      </div>
       <p class="login-error" id="login-error" aria-live="polite"></p>
       <button id="login-btn" class="btn" style="width:100%;background:var(--gold);color:var(--ivory);border-color:var(--gold);">Accedi</button>
     </div>
@@ -113,6 +116,25 @@
   document.getElementById('login-btn').addEventListener('click', tryLogin);
   document.getElementById('p').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
   document.getElementById('u').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+
+  document.getElementById('forgot-pw').addEventListener('click', async e => {
+    e.preventDefault();
+    const errorEl = document.getElementById('login-error');
+    errorEl.style.color = '';
+    const email = document.getElementById('u').value.trim();
+    if (!email) {
+      errorEl.textContent = 'Inserisci la tua email, poi clicca su "Password dimenticata?"';
+      return;
+    }
+    try {
+      await auth.sendPasswordResetEmail(email);
+      errorEl.style.color = '#5a8a5a';
+      errorEl.textContent = 'Email di reset inviata! Controlla la posta.';
+    } catch(e) {
+      errorEl.textContent = e.code === 'auth/user-not-found'
+        ? 'Nessun account con questa email' : 'Errore nell\'invio dell\'email';
+    }
+  });
   document.getElementById('refresh-btn').addEventListener('click', () => loadGallery());
   document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
